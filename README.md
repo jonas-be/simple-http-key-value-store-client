@@ -3,7 +3,7 @@
 This application is a cli client for the [simple-http-key-value-store](https://github.com/jonas-be/simple-http-key-value-store).
 
 > **Note**
-> This project was mainly for learning Go.
+> This project was mainly for learning Go. Especially to write a simple cli app and learn the `jarcoal/httpmock` library. 
 
 
 ## How to use
