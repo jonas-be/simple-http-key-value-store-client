@@ -2,8 +2,7 @@ package client
 
 import (
 	"fmt"
-	"io/ioutil"
-	"log"
+	"io"
 	"net/http"
 	"strings"
 )
@@ -12,52 +11,55 @@ type Client struct {
 	BaseURL string
 }
 
-func (client Client) Request(methodFlag string, keyFlag string, valueFlag string) string {
+func (cl Client) Request(methodFlag string, keyFlag string, valueFlag string) string {
 	httpClient := &http.Client{}
 
 	switch strings.ToLower(methodFlag) {
 	case "get":
-		return client.getRequest(keyFlag, httpClient)
+		return cl.getRequest(keyFlag, httpClient)
 	case "put":
-		return client.putRequest(valueFlag, keyFlag, httpClient)
+		return cl.putRequest(valueFlag, keyFlag, httpClient)
 	case "delete", "del":
-		return client.deleteRequest(keyFlag, httpClient)
+		return cl.deleteRequest(keyFlag, httpClient)
 	default:
 		return fmt.Sprintf("method not supported\n")
 	}
 }
 
-func (client Client) getRequest(keyFlag string, httpClient *http.Client) string {
-	bodyString, status, err := client.httpRequest(http.MethodGet, fmt.Sprintf("%v/data?key=%v", client.BaseURL, keyFlag), httpClient)
+func (cl Client) getRequest(keyFlag string, httpClient *http.Client) string {
+	bodyString, status, err := cl.httpRequest(http.MethodGet, fmt.Sprintf("%v/data?key=%v", cl.BaseURL, keyFlag), httpClient)
 	if err != nil {
 		fmt.Println(err)
 		return ""
 	}
-	return fmt.Sprintf("[ %v ]: %v\n", status, bodyString)
+	if status == 200 {
+		return bodyString
+	}
+	return statusCodeToMessage(status, bodyString)
 }
 
-func (client Client) deleteRequest(keyFlag string, httpClient *http.Client) string {
-	bodyString, status, err := client.httpRequest(http.MethodDelete, fmt.Sprintf("%v/data?key=%v", client.BaseURL, keyFlag), httpClient)
+func (cl Client) deleteRequest(keyFlag string, httpClient *http.Client) string {
+	bodyString, status, err := cl.httpRequest(http.MethodDelete, fmt.Sprintf("%v/data?key=%v", cl.BaseURL, keyFlag), httpClient)
 	if err != nil {
 		fmt.Println(err)
 		return ""
 	}
-	return fmt.Sprintf("[ %v ]: %v\n", status, bodyString)
+	return statusCodeToMessage(status, bodyString)
 }
 
-func (client Client) putRequest(valueFlag string, keyFlag string, httpClient *http.Client) string {
+func (cl Client) putRequest(valueFlag string, keyFlag string, httpClient *http.Client) string {
 	if valueFlag == "" {
 		return "no value set"
 	}
-	bodyString, status, err := client.httpRequest(http.MethodPut, fmt.Sprintf("%v/data?key=%v&value=%v", client.BaseURL, keyFlag, valueFlag), httpClient)
+	bodyString, status, err := cl.httpRequest(http.MethodPut, fmt.Sprintf("%v/data?key=%v&value=%v", cl.BaseURL, keyFlag, valueFlag), httpClient)
 	if err != nil {
 		fmt.Println(err)
 		return ""
 	}
-	return fmt.Sprintf("[ %v ]: %v\n", status, bodyString)
+	return statusCodeToMessage(status, bodyString)
 }
 
-func (client Client) httpRequest(method string, url string, httpClient *http.Client) (string, int, error) {
+func (cl Client) httpRequest(method string, url string, httpClient *http.Client) (string, int, error) {
 	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
 		fmt.Println(err)
@@ -68,11 +70,31 @@ func (client Client) httpRequest(method string, url string, httpClient *http.Cli
 		fmt.Println(err)
 		return "", 0, err
 	}
-	body, err := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Println(err)
+		fmt.Println(err)
 		return "", resp.StatusCode, err
 	}
 	sb := string(body)
 	return sb, resp.StatusCode, nil
+}
+
+func statusCodeToMessage(status int, bodyString string) string {
+	switch status {
+	case http.StatusOK:
+		return "Your value was updated"
+	case http.StatusCreated:
+		return "Your key value pair was created"
+	case http.StatusNoContent:
+		return "Deleted"
+	case http.StatusRequestEntityTooLarge:
+		return "Your key or value is over 200 characters"
+	case http.StatusInsufficientStorage:
+		return "Database is out of memory"
+	case http.StatusBadRequest:
+		return fmt.Sprintf("Your Request is invalid: %v\n", bodyString)
+	default:
+		return fmt.Sprintf("Unexpected server response: [%v] %v\n", status, bodyString)
+	}
 }
